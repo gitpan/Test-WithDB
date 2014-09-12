@@ -2,7 +2,7 @@ NAME
     Test::WithDB - Framework for testing application using database
 
 VERSION
-    This document describes version 0.01 of Test::WithDB (from Perl
+    This document describes version 0.02 of Test::WithDB (from Perl
     distribution Test-WithDB), released on 2014-09-12.
 
 SYNOPSIS
@@ -12,9 +12,15 @@ SYNOPSIS
      admin_user="postgres"
      admin_pass="adminpass"
 
-     test_dsn ="dbi:Pg:dbname=%s;host=localhost"
-     test_user="someuser"
-     test_pass="somepass"
+     user_dsn ="dbi:Pg:dbname=%s;host=localhost"
+     user_user="someuser"
+     user_pass="somepass"
+
+     # optional: SQL statements to initialize DB by test user after created
+     init_sql_admin=CREATE EXTENSION citext
+
+     # optional: SQL statements to initialize DB by test user after created
+     init_sql_test=
 
     In your test file:
 
@@ -61,6 +67,9 @@ DESCRIPTION
 ATTRIBUTES
   config_path => str (default: "~/test-withdb.ini").
     Path to configuration file. File will be read using Config::IOD::Reader.
+
+  config_profile => str (default: GLOBAL)
+    Pick section in configuration file to use.
 
 METHODS
   new(%attrs) => obj

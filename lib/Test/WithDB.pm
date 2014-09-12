@@ -1,7 +1,7 @@
 package Test::WithDB;
 
 our $DATE = '2014-09-12'; # DATE
-our $VERSION = '0.01'; # VERSION
+our $VERSION = '0.02'; # VERSION
 
 use 5.010001;
 use strict;
@@ -34,15 +34,19 @@ sub _read_config {
     require Config::IOD::Reader;
 
     my $self = shift;
-    $self->{_config} =
-        Config::IOD::Reader->new->read_file($self->{config_path});
+    my $path = $self->{config_path};
+    my $cfg = Config::IOD::Reader->new->read_file($path);
+    my $profile = $self->{config_profile} // 'GLOBAL';
+    die "Config profile '$profile' not found in config file '$path'"
+        unless $cfg->{$profile};
+    $self->{_config} = $cfg->{$profile};
 }
 
 sub _init {
     my $self = shift;
 
     $self->_read_config;
-    my $cfg = $self->{_config}{GLOBAL};
+    my $cfg = $self->{_config};
 
     my ($driver) = $cfg->{admin_dsn} =~ /^dbi:([^:]+)/;
     if ($driver !~ /^(Pg|SQLite)$/) {
@@ -63,25 +67,45 @@ sub create_db {
     $dbname = "testdb_".strftime("%Y%m%d_%H%M%S", localtime).
         "_$dbname"; # <= 64 chars
 
-    my $cfg = $self->{_config}{GLOBAL};
+    my $cfg = $self->{_config};
 
     # XXX allow specifying more options
     Test::More::note("Creating test database '$dbname' ...");
     $log->debug     ("Creating test database '$dbname' ...");
     if ($self->{_driver} eq 'Pg') {
-        $self->{_admin_dbh}->do("CREATE DATABASE $dbname OWNER $cfg->{test_user}");
+        $self->{_admin_dbh}->do("CREATE DATABASE $dbname OWNER $cfg->{user_user}");
     } elsif ($self->{_driver} eq 'SQLite') {
         # we don't need to do anything
     }
-
     push @{ $self->{_created_dbs}  }, $dbname;
 
-    my $dsn = $cfg->{test_dsn};
+    my $dsn = $cfg->{user_dsn};
     $dsn =~ s/%s/$dbname/
-        or die "test_dsn in configuration file does not contain '%s': $dsn";
+        or die "user_dsn in configuration file does not contain '%s': $dsn";
 
-    my $dbh = DBI->connect($dsn, $cfg->{test_user}, $cfg->{test_pass},
+    {
+        my $sql = $cfg->{init_sql_admin};
+        last unless $sql;
+        my $dbh = DBI->connect($dsn, $cfg->{admin_user}, $cfg->{admin_pass},
+                               {RaiseError=>1});
+        for my $st (ref($sql) eq 'ARRAY' ? @$sql : ($sql)) {
+            Test::More::note("Initializing database by admin: $st ...");
+            $log->debug     ("Initializing database by admin: $st ...");
+            $dbh->do($st);
+        }
+    }
+
+    my $dbh = DBI->connect($dsn, $cfg->{user_user}, $cfg->{user_pass},
                            {RaiseError=>1});
+    {
+        my $sql = $cfg->{init_sql_user};
+        last unless $sql;
+        for my $st (ref($sql) eq 'ARRAY' ? @$sql : ($sql)) {
+            Test::More::note("Initializing database by test user: $st ...");
+            $log->debug     ("Initializing database by test user: $st ...");
+            $dbh->do($st);
+        }
+    }
     push @{ $self->{_dbhs} }, $dbh;
     $dbh;
 }
@@ -140,7 +164,7 @@ Test::WithDB - Framework for testing application using database
 
 =head1 VERSION
 
-This document describes version 0.01 of Test::WithDB (from Perl distribution Test-WithDB), released on 2014-09-12.
+This document describes version 0.02 of Test::WithDB (from Perl distribution Test-WithDB), released on 2014-09-12.
 
 =head1 SYNOPSIS
 
@@ -150,9 +174,15 @@ In your C<~/test-withdb.ini>:
  admin_user="postgres"
  admin_pass="adminpass"
 
- test_dsn ="dbi:Pg:dbname=%s;host=localhost"
- test_user="someuser"
- test_pass="somepass"
+ user_dsn ="dbi:Pg:dbname=%s;host=localhost"
+ user_user="someuser"
+ user_pass="somepass"
+
+ # optional: SQL statements to initialize DB by test user after created
+ init_sql_admin=CREATE EXTENSION citext
+
+ # optional: SQL statements to initialize DB by test user after created
+ init_sql_test=
 
 In your test file:
 
@@ -201,6 +231,10 @@ Currently only supports Postgres and SQLite.
 =head2 config_path => str (default: C<~/test-withdb.ini>).
 
 Path to configuration file. File will be read using L<Config::IOD::Reader>.
+
+=head2 config_profile => str (default: GLOBAL)
+
+Pick section in configuration file to use.
 
 =head1 METHODS
 

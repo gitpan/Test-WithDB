@@ -6,6 +6,7 @@ META.json
 META.yml
 Makefile.PL
 README
+bin/drop-all-test-dbs
 dist.ini
 lib/Test/WithDB.pm
 t/00-compile.t

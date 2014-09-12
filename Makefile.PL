@@ -16,7 +16,9 @@ my %WriteMakefileArgs = (
     "ExtUtils::MakeMaker" => "6.30"
   },
   "DISTNAME" => "Test-WithDB",
-  "EXE_FILES" => [],
+  "EXE_FILES" => [
+    "bin/drop-all-test-dbs"
+  ],
   "LICENSE" => "perl",
   "NAME" => "Test::WithDB",
   "PREREQ_PM" => {
@@ -31,7 +33,7 @@ my %WriteMakefileArgs = (
     "IPC::Open3" => 0,
     "Test::More" => "0.98"
   },
-  "VERSION" => "0.01",
+  "VERSION" => "0.02",
   "test" => {
     "TESTS" => "t/*.t"
   }
