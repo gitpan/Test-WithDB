@@ -1,0 +1,103 @@
+NAME
+    Test::WithDB - Framework for testing application using database
+
+VERSION
+    This document describes version 0.01 of Test::WithDB (from Perl
+    distribution Test-WithDB), released on 2014-09-12.
+
+SYNOPSIS
+    In your "~/test-withdb.ini":
+
+     admin_dsn ="dbi:Pg:dbname=template1;host=localhost"
+     admin_user="postgres"
+     admin_pass="adminpass"
+
+     test_dsn ="dbi:Pg:dbname=%s;host=localhost"
+     test_user="someuser"
+     test_pass="somepass"
+
+    In your test file:
+
+     use Test::More;
+     use Test::WithDB;
+
+     my $twdb = Test::WithDB->new;
+
+     my $dbh = $twdb->create_db; # create db with random name
+
+     # do stuffs with dbh
+
+     my $dbh2 = $twdb->create_db; # create another db
+
+     # do more stuffs
+
+     $twdb->done; # will drop all created databases, unless tests are not passing
+
+DESCRIPTION
+    This class provides a simple framework for testing application that
+    requires database. It is meant to work with Test::More (or to be more
+    exact, any Test::Builder-based module).
+
+    First, you supply a configuration file containing admin and normal
+    user's connection information (the admin info is needed to create
+    databases).
+
+    Then, you call one or more "create_db()" to create one or more databases
+    for testing. The database will be created with random names.
+
+    At the end of testing, when you call "$twdb->done", the class will do
+    this check:
+
+     if (Test::More->builder->is_passing) {
+         # drop all created databases
+     } else {
+        diag "Tests failing, not removing databases created during testing: ...";
+     }
+
+    So when testing fails, you can inspect the database.
+
+    Currently only supports Postgres and SQLite.
+
+ATTRIBUTES
+  config_path => str (default: "~/test-withdb.ini").
+    Path to configuration file. File will be read using Config::IOD::Reader.
+
+METHODS
+  new(%attrs) => obj
+  $twdb->create_db
+    Create a test database with random name.
+
+  $twdb->done
+    Finish testing. Will drop all created databases unless tests are not
+    passing.
+
+    Called automatically during DESTROY (but because object destruction
+    order are not guaranteed, it's best that you explicitly call "done()"
+    yourself).
+
+SEE ALSO
+    Test::More, Test::Builder
+
+HOMEPAGE
+    Please visit the project's homepage at
+    <https://metacpan.org/release/Test-WithDB>.
+
+SOURCE
+    Source repository is at <https://github.com/perlancar/perl-Test-WithDB>.
+
+BUGS
+    Please report any bugs or feature requests on the bugtracker website
+    <https://rt.cpan.org/Public/Dist/Display.html?Name=Test-WithDB>
+
+    When submitting a bug or request, please include a test-file or a patch
+    to an existing test-file that illustrates the bug or desired feature.
+
+AUTHOR
+    perlancar <perlancar@cpan.org>
+
+COPYRIGHT AND LICENSE
+    This software is copyright (c) 2014 by perlancar@cpan.org.
+
+    This is free software; you can redistribute it and/or modify it under
+    the same terms as the Perl 5 programming language system itself.
+
