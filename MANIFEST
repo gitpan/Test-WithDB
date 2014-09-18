@@ -10,6 +10,9 @@ bin/drop-all-test-dbs
 dist.ini
 lib/Test/WithDB.pm
 t/00-compile.t
+t/author-db-Pg.t
+t/author-db-SQLite.t
+t/author-db-mysql.t
 t/release-pod-coverage.t
 t/release-pod-syntax.t
 t/release-rinci.t

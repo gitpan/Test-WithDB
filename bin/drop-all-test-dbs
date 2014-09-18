@@ -1,7 +1,7 @@
 #!perl
 
-our $DATE = '2014-09-12'; # DATE
-our $VERSION = '0.02'; # VERSION
+our $DATE = '2014-09-18'; # DATE
+our $VERSION = '0.03'; # VERSION
 
 use 5.010;
 use strict;
@@ -48,7 +48,7 @@ drop-all-test-dbs - Drop all test databases
 
 =head1 VERSION
 
-This document describes version 0.02 of drop-all-test-dbs (from Perl distribution Test-WithDB), released on 2014-09-12.
+This document describes version 0.03 of drop-all-test-dbs (from Perl distribution Test-WithDB), released on 2014-09-18.
 
 =head1 HOMEPAGE
 

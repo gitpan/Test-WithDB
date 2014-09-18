@@ -1,7 +1,7 @@
 package Test::WithDB;
 
-our $DATE = '2014-09-12'; # DATE
-our $VERSION = '0.02'; # VERSION
+our $DATE = '2014-09-18'; # DATE
+our $VERSION = '0.03'; # VERSION
 
 use 5.010001;
 use strict;
@@ -18,11 +18,17 @@ sub new {
 
     my $self = bless \%attrs, $class;
 
+    $self->{config_path}    //= $ENV{TWDB_CONFIG_PATH};
+    $self->{config_profile} //= $ENV{TWDB_CONFIG_PROFILE};
+
     if (!$self->{config_path}) {
         # we're being tiny here, otherwise we'll use File::HomeDir
         my $home = $ENV{HOME} // $ENV{HOMEPATH}
             or die "Can't determine home directory";
-        $self->{config_path} = "$home/test-withdb.ini";
+        for ("$home/test-withdb.ini", "$home/twdb.ini") {
+            $self->{config_path} = $_;
+            last if -f $_;
+        }
     }
 
     $self->{_created_dbs} = [];
@@ -35,11 +41,17 @@ sub _read_config {
 
     my $self = shift;
     my $path = $self->{config_path};
-    my $cfg = Config::IOD::Reader->new->read_file($path);
+    my $cfg0 = Config::IOD::Reader->new->read_file($path);
     my $profile = $self->{config_profile} // 'GLOBAL';
+    my $cfg = $cfg0->{$profile};
     die "Config profile '$profile' not found in config file '$path'"
-        unless $cfg->{$profile};
-    $self->{_config} = $cfg->{$profile};
+        unless $cfg;
+    for (qw/admin_dsn admin_user admin_pass
+            user_dsn user_user user_pass/) {
+        die "Required config '$_' not defined in config file '$path'"
+            unless exists $cfg->{$_};
+    }
+    $self->{_config} = $cfg;
 }
 
 sub _init {
@@ -49,7 +61,7 @@ sub _init {
     my $cfg = $self->{_config};
 
     my ($driver) = $cfg->{admin_dsn} =~ /^dbi:([^:]+)/;
-    if ($driver !~ /^(Pg|SQLite)$/) {
+    if ($driver !~ /^(Pg|mysql|SQLite)$/) {
         die "Sorry, DBI driver '$driver' is not supported yet";
     }
 
@@ -73,15 +85,25 @@ sub create_db {
     Test::More::note("Creating test database '$dbname' ...");
     $log->debug     ("Creating test database '$dbname' ...");
     if ($self->{_driver} eq 'Pg') {
-        $self->{_admin_dbh}->do("CREATE DATABASE $dbname OWNER $cfg->{user_user}");
+        $self->{_admin_dbh}->do("CREATE DATABASE $dbname OWNER ".
+                                    "$cfg->{user_user}");
+    } elsif ($self->{_driver} eq 'mysql') {
+        $self->{_admin_dbh}->do("CREATE DATABASE $dbname");
+        $self->{_admin_dbh}->do("GRANT ALL ON $dbname.* TO ".
+                                    "'$cfg->{user_user}'\@'localhost'");
     } elsif ($self->{_driver} eq 'SQLite') {
         # we don't need to do anything
     }
     push @{ $self->{_created_dbs}  }, $dbname;
 
     my $dsn = $cfg->{user_dsn};
-    $dsn =~ s/%s/$dbname/
-        or die "user_dsn in configuration file does not contain '%s': $dsn";
+    $dsn =~ s/dbname=[^;]+//;
+    if ($self->{_driver} eq 'SQLite') {
+        my $dir = $cfg->{sqlite_db_dir} // '.';
+        $dsn .= ";dbname=$dir/$dbname";
+    } else {
+        $dsn .= ";dbname=$dbname";
+    }
 
     {
         my $sql = $cfg->{init_sql_admin};
@@ -113,6 +135,7 @@ sub create_db {
 sub _drop_dbs {
     my $self = shift;
 
+    my $cfg = $self->{_config};
     my $dbs = $self->{_created_dbs};
 
     for (0..@$dbs-1) {
@@ -121,7 +144,13 @@ sub _drop_dbs {
         $dbh->disconnect;
         Test::More::note("Dropping test database '$dbname' ...");
         $log->debug     ("Dropping test database '$dbname' ...");
-        $self->{_admin_dbh}->do("DROP DATABASE $dbname");
+        if ($self->{_driver} eq 'SQLite') {
+            my $dir = $cfg->{sqlite_db_dir} // '.';
+            my $path = "$dir/$dbname";
+            unlink $path or die "Can't unlink file '$path': $!";
+        } else {
+            $self->{_admin_dbh}->do("DROP DATABASE $dbname");
+        }
     }
 }
 
@@ -164,17 +193,17 @@ Test::WithDB - Framework for testing application using database
 
 =head1 VERSION
 
-This document describes version 0.02 of Test::WithDB (from Perl distribution Test-WithDB), released on 2014-09-12.
+This document describes version 0.03 of Test::WithDB (from Perl distribution Test-WithDB), released on 2014-09-18.
 
 =head1 SYNOPSIS
 
 In your C<~/test-withdb.ini>:
 
- admin_dsn ="dbi:Pg:dbname=template1;host=localhost"
+ admin_dsn ="dbi:Pg;host=localhost"
  admin_user="postgres"
  admin_pass="adminpass"
 
- user_dsn ="dbi:Pg:dbname=%s;host=localhost"
+ user_dsn ="dbi:Pg;host=localhost"
  user_user="someuser"
  user_pass="somepass"
 
@@ -182,7 +211,7 @@ In your C<~/test-withdb.ini>:
  init_sql_admin=CREATE EXTENSION citext
 
  # optional: SQL statements to initialize DB by test user after created
- init_sql_test=
+ init_sql_user=
 
 In your test file:
 
@@ -203,15 +232,16 @@ In your test file:
 
 =head1 DESCRIPTION
 
-This class provides a simple framework for testing application that requires
-database. It is meant to work with L<Test::More> (or to be more exact, any
-L<Test::Builder>-based module).
+This class (C<Test::WithDB>, or TWDB for short) provides a simple framework for
+testing application that requires database. It is meant to work with
+L<Test::More> (or to be more exact, any L<Test::Builder>-based module). It
+offers an easy way to create random databases and initialize them so they are
+ready for testing. More functionalities will be added in the future.
 
-First, you supply a configuration file containing admin and normal
-user's connection information (the admin info is needed to create databases).
-
-Then, you call one or more C<create_db()> to create one or more databases for
-testing. The database will be created with random names.
+To work with TWDB, first, you supply a configuration file containing admin and
+normal user's connection information (the admin info is needed to create
+databases). Then, you call one or more C<create_db()> to create one or more
+databases for testing. The database will be created with random names.
 
 At the end of testing, when you call C<< $twdb->done >>, the class will do this
 check:
@@ -224,11 +254,12 @@ check:
 
 So when testing fails, you can inspect the database.
 
-Currently only supports Postgres and SQLite.
+Currently only supports Postgres, MySQL, and SQLite; and tested mostly with
+Postgres.
 
 =head1 ATTRIBUTES
 
-=head2 config_path => str (default: C<~/test-withdb.ini>).
+=head2 config_path => str (default: C<~/test-withdb.ini> or C<~/twdb.ini>).
 
 Path to configuration file. File will be read using L<Config::IOD::Reader>.
 
@@ -250,6 +281,36 @@ Finish testing. Will drop all created databases unless tests are not passing.
 
 Called automatically during DESTROY (but because object destruction order are
 not guaranteed, it's best that you explicitly call C<done()> yourself).
+
+=head1 CONFIGURATION
+
+=head2 *admin_dsn => str
+
+=head2 *admin_user => str
+
+=head2 *admin_pass => str
+
+=head2 *user_dsn => str
+
+=head2 *user_user => str
+
+=head2 *user_pass => str
+
+=head2 init_sql_admin => str|array
+
+=head2 init_sql_user => str|array
+
+=head2 sqlite_db_dir => str (default: .)
+
+=head1 ENVIRONMENT
+
+=head2 TWDB_CONFIG_PATH => str
+
+Set default C<config_path>.
+
+=head2 TWDB_CONFIG_PROFILE => str
+
+Set default C<config_profile>.
 
 =head1 SEE ALSO
 

@@ -2,17 +2,17 @@ NAME
     Test::WithDB - Framework for testing application using database
 
 VERSION
-    This document describes version 0.02 of Test::WithDB (from Perl
-    distribution Test-WithDB), released on 2014-09-12.
+    This document describes version 0.03 of Test::WithDB (from Perl
+    distribution Test-WithDB), released on 2014-09-18.
 
 SYNOPSIS
     In your "~/test-withdb.ini":
 
-     admin_dsn ="dbi:Pg:dbname=template1;host=localhost"
+     admin_dsn ="dbi:Pg;host=localhost"
      admin_user="postgres"
      admin_pass="adminpass"
 
-     user_dsn ="dbi:Pg:dbname=%s;host=localhost"
+     user_dsn ="dbi:Pg;host=localhost"
      user_user="someuser"
      user_pass="somepass"
 
@@ -20,7 +20,7 @@ SYNOPSIS
      init_sql_admin=CREATE EXTENSION citext
 
      # optional: SQL statements to initialize DB by test user after created
-     init_sql_test=
+     init_sql_user=
 
     In your test file:
 
@@ -40,16 +40,18 @@ SYNOPSIS
      $twdb->done; # will drop all created databases, unless tests are not passing
 
 DESCRIPTION
-    This class provides a simple framework for testing application that
-    requires database. It is meant to work with Test::More (or to be more
-    exact, any Test::Builder-based module).
+    This class ("Test::WithDB", or TWDB for short) provides a simple
+    framework for testing application that requires database. It is meant to
+    work with Test::More (or to be more exact, any Test::Builder-based
+    module). It offers an easy way to create random databases and initialize
+    them so they are ready for testing. More functionalities will be added
+    in the future.
 
-    First, you supply a configuration file containing admin and normal
-    user's connection information (the admin info is needed to create
-    databases).
-
-    Then, you call one or more "create_db()" to create one or more databases
-    for testing. The database will be created with random names.
+    To work with TWDB, first, you supply a configuration file containing
+    admin and normal user's connection information (the admin info is needed
+    to create databases). Then, you call one or more "create_db()" to create
+    one or more databases for testing. The database will be created with
+    random names.
 
     At the end of testing, when you call "$twdb->done", the class will do
     this check:
@@ -62,10 +64,11 @@ DESCRIPTION
 
     So when testing fails, you can inspect the database.
 
-    Currently only supports Postgres and SQLite.
+    Currently only supports Postgres, MySQL, and SQLite; and tested mostly
+    with Postgres.
 
 ATTRIBUTES
-  config_path => str (default: "~/test-withdb.ini").
+  config_path => str (default: "~/test-withdb.ini" or "~/twdb.ini").
     Path to configuration file. File will be read using Config::IOD::Reader.
 
   config_profile => str (default: GLOBAL)
@@ -83,6 +86,23 @@ METHODS
     Called automatically during DESTROY (but because object destruction
     order are not guaranteed, it's best that you explicitly call "done()"
     yourself).
+
+CONFIGURATION
+  *admin_dsn => str
+  *admin_user => str
+  *admin_pass => str
+  *user_dsn => str
+  *user_user => str
+  *user_pass => str
+  init_sql_admin => str|array
+  init_sql_user => str|array
+  sqlite_db_dir => str (default: .)
+ENVIRONMENT
+  TWDB_CONFIG_PATH => str
+    Set default "config_path".
+
+  TWDB_CONFIG_PROFILE => str
+    Set default "config_profile".
 
 SEE ALSO
     Test::More, Test::Builder
